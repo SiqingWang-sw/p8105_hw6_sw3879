@@ -1,0 +1,64 @@
+---
+title: "p8105_hw6_sw3879"
+author: "Siqing Wang"
+date: "2023-11-30"
+output: github_document
+---
+
+```{r, include = FALSE, message = FALSE, warning = FALSE}
+library(tidyverse)
+
+knitr::opts_chunk$set(
+	echo = TRUE,
+	warning = FALSE,
+  fig.width = 6,
+  fig.asp = .6,
+  out.width = "90%"
+)
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+```
+
+Load key packages.
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+```
+
+## Problem 1
+Reading and cleaning dataset
+```{r}
+homicide_df = read_csv("data/homicide-data.csv") |> 
+  janitor::clean_names() |> 
+  mutate(
+    city_state = paste(city, state, sep = ", "),
+    resolved = as.numeric(disposition == "Closed by arrest"),
+    victim_age = as.numeric(victim_age)
+  ) |> 
+   filter(!(city_state %in% c("Dallas, TX", "Phoenix, AZ", "Kansas City, MO", "Tulsa, AL"))) |> 
+   filter(victim_race %in% c("White", "Black"))
+```
+
+using `glm` for logistic regression
+```{r}
+baltimore_glm = homicide_df |> filter(city_state == "Baltimore, MD") |> 
+  glm(resolved ~ victim_age + victim_race + victim_sex, data = _, family = binomial()) |> 
+  broom::tidy() |> 
+  mutate(OR = exp(estimate),
+         upperCI = exp(estimate + qnorm(.975)*std.error),
+         lowerCI = exp(estimate + qnorm(.025)*std.error))
+
+baltimore_glm |> filter(term == "victim_sexMale") |> 
+  select(term, OR, upperCI, lowerCI) |> 
+    knitr::kable(digits = 3)
+```
+
