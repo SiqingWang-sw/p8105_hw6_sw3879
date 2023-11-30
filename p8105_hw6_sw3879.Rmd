@@ -159,8 +159,28 @@ results_rsq = boot_results |>
 
 Plotting estimates
 ```{r}
-results_logb1b2 |> ggplot(aes(y = logb1b2)) + geom_boxplot()
-results_rsq |> ggplot(aes(y = r.squared)) + geom_boxplot()
+results_logb1b2 |> ggplot(aes(y = logb1b2)) + geom_boxplot() +
+  labs(title = "Estimation of log(b1*b2)")
+
+results_rsq |> ggplot(aes(y = r.squared)) + geom_boxplot() + 
+  labs(title = "Esimation of R squared")
 ```
 
+The 95% CI for log(b1*b2)
+```{r}
+results_logb1b2 |> summarise(
+  upperCI = quantile(logb1b2, 0.975, na.rm = TRUE),
+  lowerCI = quantile(logb1b2, 0.025, na.rm = TRUE)) |> 
+  knitr::kable()
+```
 
+The 95% CI for r-squared
+```{r}
+results_rsq |> summarise(
+  upperCI = quantile(r.squared, 0.975, na.rm = TRUE),
+  lowerCI = quantile(r.squared, 0.025, na.rm = TRUE)) |> 
+  knitr::kable()
+```
+
+COMMENT
+Significant amount of NaN values in log(b1*b2) due to negative precipitation values. 
