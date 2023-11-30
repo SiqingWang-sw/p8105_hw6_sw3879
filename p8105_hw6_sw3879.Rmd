@@ -48,17 +48,47 @@ homicide_df = read_csv("data/homicide-data.csv") |>
    filter(victim_race %in% c("White", "Black"))
 ```
 
-using `glm` for logistic regression
+using `glm` for logistic regression for Baltimore
 ```{r}
 baltimore_glm = homicide_df |> filter(city_state == "Baltimore, MD") |> 
-  glm(resolved ~ victim_age + victim_race + victim_sex, data = _, family = binomial()) |> 
+  glm(resolved ~ victim_age + victim_race + victim_sex, data = _, family = binomial()) 
+
+baltimore_glm |> 
   broom::tidy() |> 
   mutate(OR = exp(estimate),
          upperCI = exp(estimate + qnorm(.975)*std.error),
-         lowerCI = exp(estimate + qnorm(.025)*std.error))
-
-baltimore_glm |> filter(term == "victim_sexMale") |> 
+         lowerCI = exp(estimate + qnorm(.025)*std.error)) |> 
+  filter(term == "victim_sexMale") |> 
   select(term, OR, upperCI, lowerCI) |> 
     knitr::kable(digits = 3)
 ```
 
+Interpretation: In Baltimore MD, male victims have 0.426 times the odds to have resolved case compared with female victims while all other variables held fixed.  
+
+Using `glm` for all cities
+```{r}
+nest_glm = homicide_df |> 
+  nest(data = -city_state) |> 
+  mutate(
+    glm_model = map(data, \(df) glm(resolved ~ victim_age + victim_race + victim_sex, data = df)),
+    glm_result = map(glm_model, broom::tidy)
+  ) |> 
+  select(-data, -glm_model) |> 
+  unnest(glm_result) |> 
+  filter(term == "victim_sexMale") |> 
+  mutate(OR = exp(estimate),
+         upperCI = exp(estimate + qnorm(.975)*std.error),
+         lowerCI = exp(estimate + qnorm(.025)*std.error),
+         city_state = fct_reorder(city_state, OR)) |>
+  select(city_state, term, OR, upperCI, lowerCI)
+```
+
+Creating a plot
+```{r}
+nest_glm |> ggplot(aes(x = city_state, y = OR)) +
+  geom_point() + geom_errorbar(aes(ymin = lowerCI, ymax = upperCI)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Estimated OR for resolving homicides comparing male to female victims")
+```
+
+NYC has the lowest odd ratio while Albuquerque has the highest, meaning that in NYC, the odds of resolved cases for male victims vs. female victims is the lowest, and in Albuquerque the highest, while all other factors held constant. 
