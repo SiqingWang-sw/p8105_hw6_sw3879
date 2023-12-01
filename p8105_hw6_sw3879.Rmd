@@ -161,9 +161,6 @@ Plotting estimates
 ```{r}
 results_logb1b2 |> ggplot(aes(y = logb1b2)) + geom_boxplot() +
   labs(title = "Estimation of log(b1*b2)")
-
-results_rsq |> ggplot(aes(y = r.squared)) + geom_boxplot() + 
-  labs(title = "Esimation of R squared")
 ```
 
 The 95% CI for log(b1*b2)
@@ -174,6 +171,11 @@ results_logb1b2 |> summarise(
   knitr::kable()
 ```
 
+```{r}
+results_rsq |> ggplot(aes(y = r.squared)) + geom_boxplot() + 
+  labs(title = "Esimation of R squared")
+```
+
 The 95% CI for r-squared
 ```{r}
 results_rsq |> summarise(
@@ -181,6 +183,95 @@ results_rsq |> summarise(
   lowerCI = quantile(r.squared, 0.025, na.rm = TRUE)) |> 
   knitr::kable()
 ```
+The estimated R squared value is close to 1, meaning there is a high percentage in the variance of `tmax` that can be explained by the relationship with the predictors `tmin` and `prcp`. 
 
 COMMENT
 Significant amount of NaN values in log(b1*b2) due to negative precipitation values. 
+
+## Problem 3
+
+Reading and cleaning data
+```{r}
+bwt_df = read_csv("data/birthweight.csv") |> 
+  janitor::clean_names() |> 
+  mutate(
+    babysex = factor(babysex, levels = c(1, 2), labels = c("male", "female")),
+    frace = factor(frace, levels = c(1, 2, 3, 4, 8, 9), labels = c("White", "Black", "Asian", "Puerto Rican", "Other", "Unknown")),
+  mrace = factor(mrace, levels = c(1, 2, 3, 4, 8, 9), labels = c("White", "Black", "Asian", "Puerto Rican", "Other", "Unknown")),
+  malform = factor(malform, levels = c(0, 1), labels = c("absent", "present"))
+  )
+```
+
+My hypothesis is that birth weight is associated with presence of malformation `malform` and mother’s weight gain during pregnancy `wtgain`, since I hypothesize pregnant mom with greater weight gain may have babies that weigh more, and those who don't have malformation might have higher weight. I will use MLR to fit `malform` and `wtgain` as predictor, and `bwt` as outcome. I will also include an interaction term. 
+
+```{r}
+q3m1 = lm(bwt ~ malform + wtgain + malform*wtgain, data = bwt_df)
+
+broom::tidy(q3m1)
+```
+
+Plotting residuals agains fitted value for my model:
+```{r}
+bwt_df |> modelr::add_predictions(q3m1) |> 
+  modelr::add_residuals(q3m1) |> 
+  ggplot(aes(x = pred, y = resid)) + geom_point() +
+  labs(title = "MLR of birth weight with malformations and weight gain")
+```
+
+Now comparing with the other two given models:
+```{r}
+q3model2 = lm(bwt ~ blength + gaweeks, data = bwt_df)
+broom::tidy(q3model2)
+
+q3model3 = lm(bwt ~ bhead + blength + babysex + bhead*blength + bhead*babysex + blength*babysex + bhead*blength*babysex, data = bwt_df)
+broom::tidy(q3model3)
+```
+
+```{r}
+cv_df = 
+  bwt_df |> 
+  modelr::crossv_mc(n = 100) |> 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  )
+
+cv_results = cv_df |> mutate(
+  q3m1 = map(train, \(df) lm(bwt ~ malform + wtgain + malform*wtgain, data = df)),
+  q3m2 = map(train, \(df) lm(bwt ~ blength + gaweeks, data = df)),
+  q3m3 = map(train, \(df) lm(bwt ~ bhead + blength + babysex + bhead*blength + bhead*babysex + blength*babysex + bhead*blength*babysex, data = df))
+  )|> 
+    mutate(
+    rmse_q3m1 = map2_dbl(q3m1, test, \(mod, df) modelr::rmse(mod, df)),
+    rmse_q3m2 = map2_dbl(q3m2, test, \(mod, df) modelr::rmse(mod, df)),
+    rmse_q3m3 = map2_dbl(q3m3, test, \(mod, df) modelr::rmse(mod, df))
+    )
+
+cv_results |> 
+  select(starts_with("rmse")) |> 
+  pivot_longer(
+    everything(),
+    names_to = "model_type",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) |> 
+  group_by(model_type) |> 
+  summarize(m_rmse = mean(rmse))
+```
+
+Plot the RMSE for all three models
+```{r}
+cv_results |> 
+  select(starts_with("rmse")) |> 
+  pivot_longer(
+    everything(),
+    names_to = "model_type",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) |> 
+  ggplot(aes(x = model_type, y = rmse)) +
+  geom_violin() +
+  labs(title = "Comparison between my model (q3m1) and 2 given models")
+```
+
+The 2 alternative models are significantly better than the model I proposed due to the lower RMSE. 
