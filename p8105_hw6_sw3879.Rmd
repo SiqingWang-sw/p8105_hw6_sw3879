@@ -91,7 +91,7 @@ nest_glm |> ggplot(aes(x = city_state, y = OR)) +
   labs(title = "Estimated OR for resolving homicides comparing male to female victims")
 ```
 
-NYC has the lowest odd ratio while Albuquerque has the highest, meaning that in NYC, the odds of resolved cases for male victims vs. female victims is the lowest, and in Albuquerque the highest, while all other factors held constant. 
+NYC has the lowest odds ratio while Albuquerque has the highest, meaning that in NYC, the odds of resolved cases for male victims vs. female victims is the lowest, and in Albuquerque the highest, while all other factors held constant. 
 
 ## Problem 2
 Reading the data
@@ -157,40 +157,45 @@ results_rsq = boot_results |>
   distinct(.keep_all = TRUE)
 ```
 
-Plotting estimates
+Looking at log(b1*b2)
 ```{r}
-results_logb1b2 |> ggplot(aes(y = logb1b2)) + geom_boxplot() +
-  labs(title = "Estimation of log(b1*b2)")
+results_logb1b2 |> ggplot(aes(x = logb1b2)) + geom_boxplot() +
+  labs(title = "Distribution of log(b1*b2)")
 ```
 
-The 95% CI for log(b1*b2)
+The median of log(b1*b2) is around -6, the data is left-skewed with many outliers at the lower end. 
+
+One thing to note here is that there are a lot of negative estimate values for `prcp`, so many log(b1\*b2) is `NaN`, and these are excluded from plotting or calculation of quantiles. Only `r sum(!is.na(results_logb1b2$logb1b2))` rows out of `r nrow(results_logb1b2)` rows have valid log(b1\*b2) values. 
+
+The 95% CI for log(b1*b2):
 ```{r}
 results_logb1b2 |> summarise(
-  upperCI = quantile(logb1b2, 0.975, na.rm = TRUE),
-  lowerCI = quantile(logb1b2, 0.025, na.rm = TRUE)) |> 
+  lowerCI = quantile(logb1b2, 0.025, na.rm = TRUE),
+  upperCI = quantile(logb1b2, 0.975, na.rm = TRUE)) |> 
   knitr::kable()
 ```
 
 ```{r}
-results_rsq |> ggplot(aes(y = r.squared)) + geom_boxplot() + 
-  labs(title = "Esimation of R squared")
+results_rsq |> ggplot(aes(x = r.squared)) + geom_boxplot() + 
+  labs(title = "Distribution of R squared")
 ```
 
-The 95% CI for r-squared
-```{r}
-results_rsq |> summarise(
-  upperCI = quantile(r.squared, 0.975, na.rm = TRUE),
-  lowerCI = quantile(r.squared, 0.025, na.rm = TRUE)) |> 
-  knitr::kable()
-```
 The estimated R squared value is close to 1, meaning there is a high percentage in the variance of `tmax` that can be explained by the relationship with the predictors `tmin` and `prcp`. 
 
-COMMENT
-Significant amount of NaN values in log(b1*b2) due to negative precipitation values. 
+The 95% CI for r-squared:
+```{r}
+results_rsq |> summarise(
+  lowerCI = quantile(r.squared, 0.025, na.rm = TRUE),
+  upperCI = quantile(r.squared, 0.975, na.rm = TRUE)) |> 
+  knitr::kable()
+```
+
+The 95% CI is relatively small and close to 1, meaning overall the model fits the data relatively well. 
 
 ## Problem 3
 
 Reading and cleaning data
+
 ```{r}
 bwt_df = read_csv("data/birthweight.csv") |> 
   janitor::clean_names() |> 
@@ -200,23 +205,31 @@ bwt_df = read_csv("data/birthweight.csv") |>
   mrace = factor(mrace, levels = c(1, 2, 3, 4, 8, 9), labels = c("White", "Black", "Asian", "Puerto Rican", "Other", "Unknown")),
   malform = factor(malform, levels = c(0, 1), labels = c("absent", "present"))
   )
+
+print("Displaying the number of missing values in each column:")
+colSums(is.na(bwt_df))
 ```
 
-My hypothesis is that birth weight is associated with presence of malformation `malform` and mother’s weight gain during pregnancy `wtgain`, since I hypothesize pregnant mom with greater weight gain may have babies that weigh more, and those who don't have malformation might have higher weight. I will use MLR to fit `malform` and `wtgain` as predictor, and `bwt` as outcome. I will also include an interaction term. 
+For data cleaning, I reorganized all categorical data into factor; there is no missing data in this set. 
 
+To propose a model, my hypothesis is that birth weight is associated with presence of malformation `malform` and mother’s weight gain during pregnancy `wtgain`, since I hypothesize pregnant mom with greater weight gain may have babies that weigh more, and babies who don't have malformation might have higher weight. I will use MLR to fit `malform` and `wtgain` as predictor, and `bwt` as outcome. I will also include an interaction term since I assume `malform` may be an effect modifier. 
+
+Fitting the model I proposed: 
 ```{r}
 q3m1 = lm(bwt ~ malform + wtgain + malform*wtgain, data = bwt_df)
 
 broom::tidy(q3m1)
 ```
 
-Plotting residuals agains fitted value for my model:
+Plotting residuals against fitted value for my model:
 ```{r}
 bwt_df |> modelr::add_predictions(q3m1) |> 
   modelr::add_residuals(q3m1) |> 
   ggplot(aes(x = pred, y = resid)) + geom_point() +
   labs(title = "MLR of birth weight with malformations and weight gain")
 ```
+
+From this plot, we can see that the residuals are very large, meaning the this is not an optimal model. 
 
 Now comparing with the other two given models:
 ```{r}
@@ -274,4 +287,4 @@ cv_results |>
   labs(title = "Comparison between my model (q3m1) and 2 given models")
 ```
 
-The 2 alternative models are significantly better than the model I proposed due to the lower RMSE. 
+The 2 alternative models are significantly better than the model I proposed due to lower RMSE. 
